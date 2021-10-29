@@ -1,6 +1,6 @@
 openapi: 3.0.2
 info:
-  title: barbankvee2
+  title: BarBank
   version: 1.0.0
 paths:
   /users:
@@ -27,7 +27,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Parameter missing:
+                'user validation failed:':
                   value:
                     error: >-
                       user validation failed: (?<parameterName>[^:]+): Path
@@ -40,10 +40,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Username already exists:
+                username already exists:
                   value:
-                    error: Username already exists
-          description: Username already exists
+                    error: username already exists
+          description: username already exists
         '422':
           content:
             application/json:
@@ -56,7 +56,7 @@ paths:
                       Path `(?<parameterName>.+)` \(`(?<sampleValue>.+)`\) is
                       (longer|shorter) than the (maximum|minimum) allowed length
                       \((?<requiredLength>\d+)\)
-          description: Parameter(s) value too short/long
+          description: 'Parameter(s) value too short/long:'
       operationId: createuser
       summary: Create a user
       description: Creates a new instance of a `user`.
@@ -75,14 +75,14 @@ paths:
             examples:
               POST /sessions request:
                 value:
-                  username: man
-                  password: qwertqwetqwert
+                  username: peeter
+                  password: qwerty1234
         required: true
       tags:
         - sessions
       responses:
-        '201':
-          description: Successful response.
+        '200':
+          description: Successful login
         '400':
           content:
             application/json:
@@ -91,7 +91,7 @@ paths:
               examples:
                 Required parameter missing:
                   value:
-                    error: Required parameter missing
+                    error: Invalid authorization format
           description: Required parameter missing
         '401':
           content:
@@ -111,7 +111,7 @@ paths:
         - sessions
       responses:
         '204':
-          description: Session successfully deleted
+          description: Session successfuly deleted
         '400':
           content:
             application/json:
@@ -128,18 +128,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Missing authorization:
-                  value:
-                    error: Missing authorization
                 Invalid token:
                   value:
                     error: Invalid token
+                Missing authorization:
+                  value:
+                    error: Missing authorization
           description: Problem with authorization
       security:
         -
           Bearer: []
-      summary: Delete a `session`
-      description: Deletes `session` with an id specified in authorization header.
+      summary: Deletes a session
+      description: Deletes given session with an id specified in authorization header
   /users/current:
     get:
       tags:
@@ -152,16 +152,19 @@ paths:
                 $ref: '#/components/schemas/user'
               examples:
                 GET /users/current response:
-                  value:
-                    accounts:
-                      -
-                        account_number: EE570564119
-                        balance: 10000
-                        currency: euro
-                        name: Main
-                        userId: 61670a7842bf443591d63442
-                    name: MikiHiir
-                    username: Miki
+                  value: |-
+                    {
+                        "accounts": [
+                            {
+                                "account_number": "EExz2zxd72u",
+                                "balance": 10000,
+                                "currency": "EUR",
+                                "name": "Main",
+                                "userId": "6165591f9ddb320d85751d78"
+                            }
+                        "username": "peeter",
+                        "name": "Peeter"
+                    }
           description: Successful request
         '400':
           content:
@@ -169,19 +172,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Invalid authorization format:
+                Required parameter missing:
                   value:
                     error: Invalid authorization format
-          description: Bad request
+          description: Required parameter missing
         '401':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Missing authorization:
+                Missing Authorization header:
                   value:
-                    error: Missing authorization
+                    error: Missing Authorization header
                 Invalid token:
                   value:
                     error: Invalid token
@@ -189,16 +192,16 @@ paths:
       security:
         -
           Bearer: []
-      summary: Get current user data
-      description: Returns current 'user' data
+      summary: GET active user data
+      description: Returns active `user` data
   /transactions:
     summary: Path used to manage the list of transactions.
     description: >-
-      The REST endpoint/path used to list and create zero or more `transaction` entities.  This path
+      The REST endpoint/path used to list and create zero or more `Transaction` entities.  This path
       contains a `GET` and `POST` operation to perform the list and create tasks, respectively.
     post:
       requestBody:
-        description: A new `transaction` to be created.
+        description: A new `Transaction` to be created.
         content:
           application/json:
             schema:
@@ -218,10 +221,7 @@ paths:
                 Invalid amount:
                   value:
                     error: Invalid amount
-                Invalid authorization format:
-                  value:
-                    error: Invalid authorization format
-          description: Bad request
+          description: Invalid amount
         '401':
           content:
             application/json:
@@ -234,7 +234,7 @@ paths:
                 Invalid token:
                   value:
                     error: Invalid token
-          description: Missing authorization
+          description: Problem with authorization
         '402':
           content:
             application/json:
@@ -251,9 +251,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Account from belongs to another user:
+                Forbidden:
                   value:
-                    error: Account from belongs to another user
+                    error: AccountFrom belongs to another user
           description: Forbidden
         '404':
           content:
@@ -261,9 +261,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/error'
               examples:
-                Invalid or nonexistent account:
+                accountFrom does not exist:
                   value:
-                    error: Invalid or nonexistent account
+                    error: accountFrom does not exist
                 Destination bank not found:
                   value:
                     error: Destination bank not found
@@ -271,9 +271,56 @@ paths:
       security:
         -
           Bearer: []
-      operationId: createtransaction
-      summary: Create a transaction
-      description: Creates a new instance of a `transaction`.
+      operationId: createTransaction
+      summary: Create a Transaction
+      description: Creates a new instance of a `Transaction`.
+  /transactions/b2b:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/transaction'
+        required: true
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+              examples:
+                Missing parameter:
+                  value:
+                    error: Missing parameter
+                Parameter is not string:
+                  value:
+                    error: Parameter is not string
+                Unknown sending bank:
+                  value:
+                    error: Unknown sending bank
+                Signature verification failed:
+                  value:
+                    error: Signature verification failed
+          description: Bad Request
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+              examples:
+                Internal server error:
+                  value:
+                    error: internal server error
+          description: Unknown error
+      security:
+        -
+          Bearer: []
+      summary: Create b2b
+      description: Create b2b
 components:
   schemas:
     user:
@@ -288,9 +335,9 @@ components:
         name:
           type: string
       example:
-        username: miki
-        password: qwertyqwerty
-        name: Miki Hiir
+        username: s1
+        password: qwertyuiop
+        name: jep
     error:
       title: Root Type for error
       description: ''
@@ -308,9 +355,10 @@ components:
         token:
           type: string
       example:
-        token: 6160380bb79c71cb7891db08
+        username: s1
+        password: qwertyuiop
     transaction:
-      title: Root Type for transaction
+      title: Root Type for Transaction
       description: ''
       type: object
       properties:
@@ -326,11 +374,11 @@ components:
         explanation:
           type: string
       example:
-        accountFrom: EE570564119
-        accountTo: EE187012379
-        amount: 50
+        accountFrom: bf6423052138
+        accountTo: bf6864214538
+        amount: 0
         currency: EUR
-        explanation: test
+        explanation: lol
   securitySchemes:
     Bearer:
       scheme: bearer

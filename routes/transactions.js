@@ -8,6 +8,7 @@ const {JWK, JWS} = require('node-jose')
 const {join} = require('path')
 const {verifySignature, getPublicKey} = require("../crypto")
 const base64url = require('base64url');
+const fs = require("fs");
 const Buffer = require('buffer/').Buffer;
 
 // Handle POST /transactions
@@ -153,7 +154,7 @@ router.post('/b2b', async function (req, res) {
     const accountFromBankPrefix = payload.accountFrom.substring(0, 3)
 
     // Find source bank (document)
-    const accountFromBank = await Bank.findOne({bankPrefix: accountFromBankPrefix})
+    let accountFromBank = await Bank.findOne({bankPrefix: accountFromBankPrefix})
 
     if (!accountFromBank) {
 
@@ -163,6 +164,15 @@ router.post('/b2b', async function (req, res) {
 
             // 500
             return res.status(500).send({error: "refreshBanksFromCentralBank: " + result.error}) //
+        }
+
+        // Find source bank (document)
+        accountFromBank = await Bank.findOne({bankPrefix: accountFromBankPrefix})
+
+        if (typeof result.error !== 'undefined') {
+
+            // 400
+            return res.status(400).send({error: "Unknown sending bank"}) //
         }
     }
 

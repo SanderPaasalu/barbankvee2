@@ -5,6 +5,8 @@ const axios = require('axios');
 const jose = require('node-jose');
 const Transaction = require('./models/Transaction');
 const {JWS} = require("node-jose");
+const {createSignedTransaction} = require("./crypto")
+
 exports.verifyToken = async function (req, res, next) {
 
     // Check Authorization header existence
@@ -72,8 +74,25 @@ exports.refreshBanksFromCentralBank = async () => {
         return true
     } catch (e) {
         // Return exception message on error
-        return {error: typeof e.response.data === 'undefined' ? JSON.stringify(e):JSON.stringify(e.response.data)};
+        return {error: typeof e.response.data === 'undefined' ? JSON.stringify(e) : JSON.stringify(e.response.data)};
     }
+}
+
+async function sendRequest(method, url, data) {
+    axios[method](url, data).then(response => {
+        console.log(data)
+        return JSON.parse(response);
+    })
+}
+
+async function sendPostRequest(transactionUrl, data) {
+    return await sendRequest('post', url, data)
+}
+
+async function sendRequestToBank(destinationBank, transactionAsJwt) {
+
+    const postRequest = await sendPostRequest(destinationBank.transactionUrl, {jwt: transactionAsJwt})
+    return postRequest;
 }
 
 exports.processTransactions = async () => {
@@ -157,7 +176,7 @@ exports.processTransactions = async () => {
     }, Error())
 
     // Call same function again after 1 sec
-    setTimeout(exports.processTransactions, 1000)
+   // setTimeout(exports.processTransactions, 1000)
 
 
 }
