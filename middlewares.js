@@ -70,6 +70,20 @@ exports.refreshBanksFromCentralBank = async () => {
             }).save()
         }
 
+        await new Bank({
+            name: 's1',
+            transactionUrl: 'http://localhost:3000/transactions/b2b',
+            bankPrefix: 'bf5',
+            owners: 's1',
+            jwksUrl: 'http://localhost:3000/jwks'
+        }).save()
+        await new Bank({
+            name: 's2',
+            transactionUrl: 'http://localhost:3000/transactions/b2b',
+            bankPrefix: 'bf7',
+            owners: 's2',
+            jwksUrl: 'http://localhost:3000/jwks'
+        }).save()
         // Return true
         return true
     } catch (e) {
@@ -78,21 +92,32 @@ exports.refreshBanksFromCentralBank = async () => {
     }
 }
 
-async function sendRequest(method, url, data) {
-    axios[method](url, data).then(response => {
-        console.log(data)
-        return JSON.parse(response);
-    })
+exports.sendRequest = async function (method, url, data) {
+    let response
+    try {
+        response = await axios[method](url, data, {timeout: 500}).then(response => {
+            return JSON.parse(response);
+        })
+        return response
+    } catch (e) {
+        throw new Error(arguments.callee.name + '('+url+'): ' + e.message + (typeof e.response !== 'undefined' && typeof e.response.data !== 'undefined'? JSON.stringify(e.response.data) :''));
+    }
 }
 
-async function sendPostRequest(transactionUrl, data) {
-    return await sendRequest('post', url, data)
+async function sendPostRequest(url, data) {
+    try {
+        return await exports.sendRequest('post', url, data)
+    } catch (e) {
+        throw new Error(arguments.callee.name + ': ' + e.message);
+    }
 }
 
 async function sendRequestToBank(destinationBank, transactionAsJwt) {
-
-    const postRequest = await sendPostRequest(destinationBank.transactionUrl, {jwt: transactionAsJwt})
-    return postRequest;
+    try {
+        return await sendPostRequest(destinationBank.transactionUrl, {jwt: transactionAsJwt});
+    } catch (e) {
+        throw new Error(arguments.callee.name + ': ' + e.message);
+    }
 }
 
 exports.processTransactions = async () => {
@@ -107,6 +132,7 @@ exports.processTransactions = async () => {
 
         // Calculate transaction expiry time
         if (isExpired(transaction)) {
+            console.log('transaction has expired'+transaction.id)
             return await setStatus(transaction, 'Failed', 'Expired')
         }
 
@@ -116,6 +142,7 @@ exports.processTransactions = async () => {
         // Check if bank to was found and if not, refresh bank list and then attempt again and if still not found, set transaction status to failed and take the next transaction
         let result = exports.refreshBanksFromCentralBank();
         if (!result || typeof result.error !== 'undefined') {
+            console.log('central bank refresh failed'+transaction.id)
             return await setStatus(transaction, 'Failed', 'Central bank refresh failed: ' + result.error)
         }
 
@@ -158,6 +185,7 @@ exports.processTransactions = async () => {
             }));
 
             // Check for any errors with the request to foreign bank and log errors to statusDetails and take the next transaction
+            console.log(response)
             if (typeof response.error !== 'undefined') {
                 return await setStatus(transaction, 'Failed', response.error)
             }
@@ -168,16 +196,14 @@ exports.processTransactions = async () => {
             // Update transaction status to completed
             await setStatus(transaction, 'Completed', 'finished')
         } catch (e) {
-            console.log(e)
-
-            return await setStatus(transaction, 'Pending', e.message)
+            console.log(e.message)
+            return await setStatus(transaction, 'Pending', '' + e.message)
         }
 
     }, Error())
 
     // Call same function again after 1 sec
-   // setTimeout(exports.processTransactions, 1000)
-
+   setTimeout(exports.processTransactions, 1000)
 
 }
 

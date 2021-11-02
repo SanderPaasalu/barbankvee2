@@ -1,12 +1,12 @@
-// Pull in dependencies
 const router = require('express').Router();
 const Account = require('../models/Account');
 const Transaction = require('../models/Transaction');
+const User = require('../models/User');
 const Bank = require('../models/Bank');
 const {verifyToken, refreshBanksFromCentralBank} = require("../middlewares");
 const {JWK, JWS} = require('node-jose')
 const {join} = require('path')
-const {verifySignature, getPublicKey} = require("../crypto")
+const {verifySignature, getPublicKey, getKeystore} = require("../crypto")
 const base64url = require('base64url');
 const fs = require("fs");
 const Buffer = require('buffer/').Buffer;
@@ -68,7 +68,7 @@ module.exports = router.post('/', verifyToken, async (req, res) => {
                 }
             }
         }
-
+        const user = await User.findOne({_id: req.userId})
         // Create transaction into database.
         await new Transaction({
             accountFrom: req.body.accountFrom,
@@ -76,6 +76,7 @@ module.exports = router.post('/', verifyToken, async (req, res) => {
             amount: req.body.amount,
             currency: accountFrom.currency,
             explanation: req.body.explanation,
+            senderName: user.name,
             statusDetails: statusDetails
         }).save();
 
@@ -95,31 +96,25 @@ module.exports = router.post('/', verifyToken, async (req, res) => {
     }
 });
 
-// Yoinks money
+// Debit money
 async function debitAccount(account, amount) {
     account.balance -= amount
     await account.save();
 }
 
-// Plonks money
+// Credit money
 async function creditAccount(account, amount) {
     account.balance += amount
     await account.save();
 }
 
+// Gets jwks keystore
 router.get('/jwks', async function (req, res) {
-
-    // Add our private key from file to the keystore
-    console.log('/jwks: Reading keystore from json file into memory')
-    const keystoreAsJsonString = fs.readFileSync(join('.cert', 'keystore.json')).toString();
-    const keystore = await JWK.asKeyStore(keystoreAsJsonString)
-
-    // Return our keystore (only the public key derived from the imported private key) in JWKS (JSON Web Key Set) format
-    console.log('/jwks: Returning keystore without private key')
-
+    const keystore = await getKeystore()
     return res.send(keystore.toJSON())
 })
 
+// converts currency when called
 async function convertCurrency(payload, accountTo) {
     let amount = payload.amount
     if (accountTo.currency !== payload.currency) {
@@ -131,25 +126,35 @@ async function convertCurrency(payload, accountTo) {
 }
 
 router.post('/b2b', async function (req, res) {
+    let payload;
+    let accountTo;
     try {
         const components = req.body.jwt.split('.')
-        const payload = JSON.parse(base64url.decode(components[1]))
-        const accountTo = await Account.findOne({number: payload.accountTo})
+        payload = JSON.parse(base64url.decode(components[1]))
+        accountTo = await Account.findOne({number: payload.accountTo})
     } catch (e) {
 
         // 500 - Internal server error
         return res.status(500).send({error: e.message})
     }
-
     // Get source bank prefix
-    ["accountFrom", "accountTo", "amount", "currency", "explanation", "senderName"].forEach(function (parameter) {
-        if (!payload[parameter]) {
-            return res.status(400).send({error: 'Missing parameter ' + parameter + ' in JWT'})
+    console.log(payload);
+    [{name: "accountFrom", type: "string"}, {name: "accountTo", type: "string"}, {
+        name: "amount",
+        type: "number"
+    }, {name: "currency", type: "string"}, {name: "explanation", type: "string"}, {
+        name: "senderName",
+        type: "string"
+    }].forEach(function (parameter) {
+        if (!payload[parameter.name]) {
+            console.log('payload missing parameter' + parameter.name)
+            return res.status(400).send({error: 'Missing parameter ' + parameter.name + ' in JWT'})
         }
-        if (typeof payload[parameter] !== 'string') {
-            return res.status(400).send({error: parameter + ' is of type ' + typeof payload[parameter] + ' but expected it to be type string in JWT'})
+        if (typeof payload[parameter.name] !== parameter.type) {
+            console.log('payload parameter is not ' + parameter.type)
+            return res.status(400).send({error: parameter.name + ' is of type ' + typeof payload[parameter.name] + ' but expected it to be type' + parameter.type + ' in JWT'})
         }
-    })
+    });
 
     const accountFromBankPrefix = payload.accountFrom.substring(0, 3)
 
@@ -158,10 +163,11 @@ router.post('/b2b', async function (req, res) {
 
     if (!accountFromBank) {
 
+
         // Refresh the local list of banks with the list of banks from the central bank - kinda long but eh
         const result = await refreshBanksFromCentralBank();
         if (typeof result.error !== 'undefined') {
-
+            console.log('There was an error when refreshing banks')
             // 500
             return res.status(500).send({error: "refreshBanksFromCentralBank: " + result.error}) //
         }
@@ -169,7 +175,7 @@ router.post('/b2b', async function (req, res) {
         // Find source bank (document)
         accountFromBank = await Bank.findOne({bankPrefix: accountFromBankPrefix})
 
-        if (typeof result.error !== 'undefined') {
+        if (typeof result.error !== 'undefined' || !accountFromBank) {
 
             // 400
             return res.status(400).send({error: "Unknown sending bank"}) //
@@ -190,6 +196,6 @@ router.post('/b2b', async function (req, res) {
 
     const accountToOwner = await User.findOne({_id: accountTo.userId})
 
-    //money laundering
+    // Credit Account
     await creditAccount(accountTo, req.body.amount)
 })

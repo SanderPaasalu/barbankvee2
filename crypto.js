@@ -3,7 +3,7 @@ const fs = require('fs')
 const {join} = require('path')
 const jwkToPem = require('jwk-to-pem')
 const jwt = require('jsonwebtoken')
-const {sendGetRequest} = require("./middlewares")
+const {sendRequest} = require("./middlewares")
 const certDir = '.cert'
 const keystoreFile = join(certDir, 'keystore.json')
 
@@ -16,6 +16,7 @@ exports.getKeystore = async function () {
         console.log('Generate keystore')
         await keystore.generate('RSA', 2048, {alg: 'RS256', use: 'sig'})
         fs.writeFileSync(keystoreFile, JSON.stringify(keystore.toJSON(true)))
+        return await keystore
     } else {
         console.log('Import keystore')
         const ks = fs.readFileSync(join('.cert', 'keystore.json'))
@@ -55,7 +56,7 @@ exports.verifySignature = async function (jwtString, publicKey) {
 }
 
 exports.getPublicKey = async function (jwksUrl) {
-    const jwks = await sendGetRequest(jwksUrl)
+   // const jwks = await sendRequest('get', jwksUrl)
     const signingKey = await exports.getSigningKey();
     return jwkToPem(signingKey.toJSON())
 }
